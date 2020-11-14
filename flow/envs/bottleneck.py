@@ -530,7 +530,8 @@ class BottleneckAccelEnv(BottleneckEnv):
         super().__init__(env_params, sim_params, network, simulator)
         self.add_rl_if_exit = env_params.get_additional_param("add_rl_if_exit")
         self.num_rl = deepcopy(self.initial_vehicles.num_rl_vehicles)
-        self.rl_id_list = deepcopy(self.initial_vehicles.get_rl_ids())
+        #self.rl_id_list = deepcopy(self.initial_vehicles.get_rl_ids())
+        #import pdb; pdb.set_trace()
         self.max_speed = self.k.network.max_speed()
 
     @property
@@ -548,19 +549,21 @@ class BottleneckAccelEnv(BottleneckEnv):
         headway_scale = 1000
 
         rl_ids = self.k.vehicle.get_rl_ids()
+        sorted_rl_ids = sorted(rl_ids, key=self.k.vehicle.get_x_by_id)[:self.num_rl]
 
         # rl vehicle data (absolute position, speed, and lane index)
-        rl_obs = np.empty(0)
+        #rl_obs = np.empty()
+        rl_obs = np.zeros((self.num_rl, 4))
         id_counter = 0
-        for veh_id in rl_ids:
+        for i, veh_id in enumerate(sorted_rl_ids):
             # check if we have skipped a vehicle, if not, pad
-            rl_id_num = self.rl_id_list.index(veh_id)
-            if rl_id_num != id_counter:
-                rl_obs = np.concatenate(
-                    (rl_obs, np.zeros(4 * (rl_id_num - id_counter))))
-                id_counter = rl_id_num + 1
-            else:
-                id_counter += 1
+            #rl_id_num = self.rl_id_list.index(veh_id)
+            #if rl_id_num != id_counter:
+                #rl_obs = np.concatenate(
+                    #(rl_obs, np.zeros(4 * (rl_id_num - id_counter))))
+                #id_counter = rl_id_num + 1
+            #else:
+                #id_counter += 1
 
             # get the edge and convert it to a number
             edge_num = self.k.vehicle.get_edge(veh_id)
@@ -568,31 +571,35 @@ class BottleneckAccelEnv(BottleneckEnv):
                 edge_num = -1
             else:
                 edge_num = int(edge_num) / 6
-            rl_obs = np.concatenate((rl_obs, [
-                self.k.vehicle.get_x_by_id(veh_id) / 1000,
-                (self.k.vehicle.get_speed(veh_id) / self.max_speed),
-                (self.k.vehicle.get_lane(veh_id) / MAX_LANES), edge_num
-            ]))
+            #rl_obs = np.concatenate((rl_obs, [
+                #self.k.vehicle.get_x_by_id(veh_id) / 1000,
+                #(self.k.vehicle.get_speed(veh_id) / self.max_speed),
+                #(self.k.vehicle.get_lane(veh_id) / MAX_LANES), edge_num
+            #]))
+            rl_obs[i] = [self.k.vehicle.get_x_by_id(veh_id) / 1000,
+                         self.k.vehicle.get_speed(veh_id) / self.max_speed,
+                         self.k.vehicle.get_lane(veh_id) / MAX_LANES,
+                         edge_num]
 
         # if all the missing vehicles are at the end, pad
-        diff = self.num_rl - int(rl_obs.shape[0] / 4)
-        if diff > 0:
-            rl_obs = np.concatenate((rl_obs, np.zeros(4 * diff)))
+        #diff = self.num_rl - int(rl_obs.shape[0] / 4)
+        #if diff > 0:
+            #rl_obs = np.concatenate((rl_obs, np.zeros(4 * diff)))
 
         # relative vehicles data (lane headways, tailways, vel_ahead, and
         # vel_behind)
-        relative_obs = np.empty(0)
+        relative_obs = np.zeros((self.num_rl, 4 * MAX_LANES * self.scaling))
         id_counter = 0
-        for veh_id in rl_ids:
+        for i, veh_id in enumerate(sorted_rl_ids):
             # check if we have skipped a vehicle, if not, pad
-            rl_id_num = self.rl_id_list.index(veh_id)
-            if rl_id_num != id_counter:
-                pad_mat = np.zeros(
-                    4 * MAX_LANES * self.scaling * (rl_id_num - id_counter))
-                relative_obs = np.concatenate((relative_obs, pad_mat))
-                id_counter = rl_id_num + 1
-            else:
-                id_counter += 1
+            #rl_id_num = self.rl_id_list.index(veh_id)
+            #if rl_id_num != id_counter:
+                #pad_mat = np.zeros(
+                    #4 * MAX_LANES * self.scaling * (rl_id_num - id_counter))
+                #relative_obs = np.concatenate((relative_obs, pad_mat))
+                #id_counter = rl_id_num + 1
+            #else:
+                #id_counter += 1
             num_lanes = MAX_LANES * self.scaling
             headway = np.asarray([1000] * num_lanes) / headway_scale
             tailway = np.asarray([1000] * num_lanes) / headway_scale
@@ -616,28 +623,28 @@ class BottleneckAccelEnv(BottleneckEnv):
                     vel_behind[i] = (self.k.vehicle.get_speed(lane_follower) /
                                      self.max_speed)
 
-            relative_obs = np.concatenate((relative_obs, headway, tailway,
+            relative_obs[i] = np.concatenate((headway, tailway,
                                            vel_in_front, vel_behind))
 
         # if all the missing vehicles are at the end, pad
-        diff = self.num_rl - int(relative_obs.shape[0] / (4 * MAX_LANES))
-        if diff > 0:
-            relative_obs = np.concatenate((relative_obs,
-                                           np.zeros(4 * MAX_LANES * diff)))
+        #diff = self.num_rl - int(relative_obs.shape[0] / (4 * MAX_LANES))
+        #if diff > 0:
+            #relative_obs = np.concatenate((relative_obs,
+                                           #np.zeros(4 * MAX_LANES * diff)))
 
         # per edge data (average speed, density
-        edge_obs = []
-        for edge in self.k.network.get_edge_list():
+        edge_obs = np.zeros((len(self.k.network.get_edge_list()), 2))
+        for i, edge in enumerate(self.k.network.get_edge_list()):
             veh_ids = self.k.vehicle.get_ids_by_edge(edge)
             if len(veh_ids) > 0:
                 avg_speed = (sum(self.k.vehicle.get_speed(veh_ids)) /
                              len(veh_ids)) / self.max_speed
                 density = len(veh_ids) / self.k.network.edge_length(edge)
-                edge_obs += [avg_speed, density]
+                edge_obs[i] = [avg_speed, density]
             else:
-                edge_obs += [0, 0]
+                edge_obs[i] = [0, 0]
 
-        return np.concatenate((rl_obs, relative_obs, edge_obs))
+        return np.concatenate((rl_obs.flatten(), relative_obs.flatten(), edge_obs.flatten()))
 
     def compute_reward(self, rl_actions, **kwargs):
         """See class definition."""
@@ -673,18 +680,19 @@ class BottleneckAccelEnv(BottleneckEnv):
         direction = np.round(actions[1::2])[:num_rl]
 
         # re-arrange actions according to mapping in observation space
-        sorted_rl_ids = sorted(self.k.vehicle.get_rl_ids(),
-                               key=self.k.vehicle.get_x_by_id)
+        sorted_rl_ids = sorted(self.k.vehicle.get_rl_ids(), key=self.k.vehicle.get_x_by_id)[:self.num_rl]
 
         # represents vehicles that are allowed to change lanes
         non_lane_changing_veh = [
             self.time_counter <= self.env_params.additional_params[
                 'lane_change_duration'] + self.k.vehicle.get_last_lc(veh_id)
             for veh_id in sorted_rl_ids]
+        print(non_lane_changing_veh)
+        print(self.time_counter, self.env_params.additional_params['lane_change_duration'])
+        print([self.k.vehicle.get_last_lc(veh_id) for veh_id in sorted_rl_ids])
 
         # vehicle that are not allowed to change have their directions set to 0
-        direction[non_lane_changing_veh] = \
-            np.array([0] * sum(non_lane_changing_veh))
+        direction[non_lane_changing_veh] = np.array([0] * sum(non_lane_changing_veh))
 
         self.k.vehicle.apply_acceleration(sorted_rl_ids, acc=acceleration)
         self.k.vehicle.apply_lane_change(sorted_rl_ids, direction=direction)
@@ -699,21 +707,23 @@ class BottleneckAccelEnv(BottleneckEnv):
         super().additional_command()
         # if the number of rl vehicles has decreased introduce it back in
         num_rl = self.k.vehicle.num_rl_vehicles
-        if num_rl != len(self.rl_id_list) and self.add_rl_if_exit:
+        #if num_rl != len(self.rl_id_list) and self.add_rl_if_exit:
+        if num_rl < self.num_rl and self.add_rl_if_exit:
             # find the vehicles that have exited
-            diff_list = list(
-                set(self.rl_id_list).difference(self.k.vehicle.get_rl_ids()))
-            for rl_id in diff_list:
+            #diff_list = list(
+                #set(self.rl_id_list).difference(self.k.vehicle.get_rl_ids()))
+            #for rl_id in diff_list:
+            for i in range(self.num_rl - num_rl):
                 # distribute rl cars evenly over lanes
-                lane_num = self.rl_id_list.index(rl_id) % \
-                           MAX_LANES * self.scaling
+                #lane_num = self.rl_id_list.index(rl_id) % \
+                           #MAX_LANES * self.scaling
                 # reintroduce it at the start of the network
                 try:
                     self.k.vehicle.add(
                         veh_id=rl_id,
                         edge='1',
                         type_id=str('rl'),
-                        lane=str(lane_num),
+                        lane=str(i),#str(lane_num),
                         pos="0",
                         speed="max")
                 except Exception:
