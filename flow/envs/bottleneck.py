@@ -687,6 +687,9 @@ class BottleneckAccelEnv(BottleneckEnv):
             self.time_counter <= self.env_params.additional_params[
                 'lane_change_duration'] + self.k.vehicle.get_last_lc(veh_id)
             for veh_id in sorted_rl_ids]
+        print(non_lane_changing_veh)
+        print(self.time_counter, self.env_params.additional_params['lane_change_duration'])
+        print([self.k.vehicle.get_last_lc(veh_id) for veh_id in sorted_rl_ids])
 
         # vehicle that are not allowed to change have their directions set to 0
         direction[non_lane_changing_veh] = np.array([0] * sum(non_lane_changing_veh))
